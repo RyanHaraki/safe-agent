@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
+cargo test --all
+npm run docs:check
+
