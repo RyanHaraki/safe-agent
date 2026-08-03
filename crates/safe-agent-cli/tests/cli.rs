@@ -1,4 +1,9 @@
-use std::{fs, process::Command};
+use std::thread;
+use std::time::Duration;
+use std::{
+    fs,
+    process::{Command, Stdio},
+};
 use tempfile::TempDir;
 
 fn bin() -> &'static str {
@@ -217,4 +222,83 @@ fn secret_is_explicitly_requested_in_one_subprocess_and_redacted() {
     assert!(output.status.success(), "{combined}");
     assert!(combined.contains("[REDACTED]"));
     assert!(!combined.contains("secret-value"));
+}
+
+#[test]
+fn policy_reload_requires_approval_and_changes_the_active_decision() {
+    let dir = workspace();
+    let config = tempfile::tempdir().unwrap();
+    fs::create_dir_all(dir.path().join(".safe-agent")).unwrap();
+    let policy = dir.path().join(".safe-agent/policy.toml");
+    fs::write(
+        &policy,
+        "version = 1\n[network]\ndefault = \"deny\"\ndeny = [\"example.com\"]\n",
+    )
+    .unwrap();
+    let marker = dir.path().join("first-request-complete");
+    let command = format!("safe-agent request network example.com --reason first || true; printf done > '{}'; sleep 0.3; safe-agent request network example.com --reason second", marker.display());
+    let mut command_builder = Command::new(bin());
+    command_builder
+        .env("SAFE_AGENT_TEST_CONFIG_HOME", config.path())
+        .env("SAFE_AGENT_TEST_APPROVE_ALL", "1")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .args([
+            "run",
+            "--backend",
+            "none-for-debug",
+            "--workspace",
+            dir.path().to_str().unwrap(),
+            "--",
+            "/bin/sh",
+            "-c",
+            &command,
+        ]);
+    let child = command_builder.spawn().unwrap();
+    for _ in 0..40 {
+        if marker.exists() {
+            break;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    assert!(marker.exists(), "first request did not complete");
+    fs::write(&policy, "version = 1\n[network]\ndefault = \"allow\"\n").unwrap();
+    let session_roots: Vec<_> = fs::read_dir("/tmp")
+        .unwrap()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            entry.file_name().to_string_lossy().starts_with("sa-")
+                && entry.path().join("control.sock").exists()
+        })
+        .collect();
+    let mut reloaded = false;
+    for session_root in session_roots {
+        let reload = Command::new(bin())
+            .env("SAFE_AGENT_TEST_APPROVE_ALL", "1")
+            .args([
+                "--session-socket",
+                session_root.path().join("control.sock").to_str().unwrap(),
+                "policy",
+                "reload",
+                "--workspace",
+                dir.path().to_str().unwrap(),
+            ])
+            .output()
+            .unwrap();
+        if reload.status.success()
+            && String::from_utf8_lossy(&reload.stdout).contains("approved and adopted")
+        {
+            reloaded = true;
+            break;
+        }
+    }
+    assert!(reloaded, "active session policy was not reloaded");
+    let output = child.wait_with_output().unwrap();
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(combined.contains("access denied"));
+    assert!(combined.contains("request allowed"));
 }
