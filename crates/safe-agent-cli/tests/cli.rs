@@ -193,6 +193,33 @@ fn seatbelt_allows_loopback_login_callback_without_external_network() {
     assert!(combined.contains("loopback-ok"), "{combined}");
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "requires the installed Codex CLI and live network access"]
+fn codex_doctor_has_no_sandbox_tls_trust_error() {
+    let dir = workspace();
+    let output = Command::new(bin())
+        .args([
+            "run",
+            "--network",
+            "allow",
+            "--workspace",
+            dir.path().to_str().unwrap(),
+            "--",
+            "codex",
+            "doctor",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!combined.contains("UnknownIssuer"), "{combined}");
+}
+
 #[test]
 fn summary_has_durable_session_record() {
     let dir = workspace();
