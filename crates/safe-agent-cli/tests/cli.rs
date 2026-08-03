@@ -167,6 +167,7 @@ fn summary_has_durable_session_record() {
         .unwrap();
     assert!(summary.status.success());
     assert!(String::from_utf8_lossy(&summary.stdout).contains("session_id"));
+    assert!(String::from_utf8_lossy(&summary.stdout).contains("changed_files"));
 }
 
 #[test]

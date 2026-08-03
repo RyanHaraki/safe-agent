@@ -155,6 +155,7 @@ pub fn run(options: RunOptions) -> Result<()> {
     }
     let socket_path = root.join("control.sock");
     let listener = UnixListener::bind(&socket_path)?;
+    let initial_status = audit::workspace_status(&workspace);
     let state = Arc::new(SupervisorState {
         workspace: workspace.clone(),
         policy: Mutex::new(policy.clone()),
@@ -162,6 +163,7 @@ pub fn run(options: RunOptions) -> Result<()> {
             id.clone(),
             workspace.clone(),
             session.policy_hash.clone(),
+            initial_status,
         )),
     });
     let server_state = state.clone();
@@ -177,6 +179,7 @@ pub fn run(options: RunOptions) -> Result<()> {
     let _ = server.join();
     let mut log = state.audit.lock().unwrap().clone();
     log.finish();
+    log.changed_files = audit::changed_files(&workspace, &log.initial_status);
     let durable = audit::durable_session_path(&id);
     fs::create_dir_all(durable.parent().unwrap())?;
     fs::write(&durable, serde_json::to_vec_pretty(&log)?)?;
