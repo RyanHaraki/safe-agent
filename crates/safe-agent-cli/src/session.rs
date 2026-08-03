@@ -153,6 +153,9 @@ pub fn run(options: RunOptions) -> Result<()> {
     if options.keep_logs {
         println!("Audit logs will be retained in the user session store.");
     }
+    if options.keep_session {
+        println!("Warning: --keep-session preserves disposable session state under /tmp.");
+    }
     let socket_path = root.join("control.sock");
     let listener = UnixListener::bind(&socket_path)?;
     let initial_status = audit::workspace_status(&workspace);
@@ -185,6 +188,10 @@ pub fn run(options: RunOptions) -> Result<()> {
     fs::write(&durable, serde_json::to_vec_pretty(&log)?)?;
     fs::write(audit::latest_path(), &id)?;
     println!("Session summary: {}", durable.display());
+    if options.quarantine {
+        println!("Quarantine diff:");
+        println!("{}", quarantine_diff(&source_workspace, &workspace));
+    }
     if !options.keep_session {
         let _ = fs::remove_dir_all(&root);
     }
@@ -210,6 +217,20 @@ fn copy_workspace(source: &Path, destination: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn quarantine_diff(source: &Path, copy: &Path) -> String {
+    Command::new("git")
+        .args([
+            "diff",
+            "--no-index",
+            "--stat",
+            source.to_str().unwrap_or("."),
+            copy.to_str().unwrap_or("."),
+        ])
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+        .unwrap_or_else(|error| format!("Unable to calculate quarantine diff: {error}"))
 }
 
 fn launch_child(

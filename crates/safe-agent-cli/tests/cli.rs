@@ -329,4 +329,5 @@ fn quarantine_mode_edits_a_disposable_copy() {
     );
     assert!(!dir.path().join("quarantine.txt").exists());
     assert!(String::from_utf8_lossy(&output.stdout).contains("Mode: quarantine"));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("quarantine.txt"));
 }
