@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
+    process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -19,17 +20,26 @@ pub struct AuditLog {
     pub policy_hash: String,
     pub started_at: u64,
     pub finished_at: Option<u64>,
+    pub initial_status: String,
+    pub changed_files: Vec<String>,
     pub events: Vec<AuditEvent>,
 }
 
 impl AuditLog {
-    pub fn new(session_id: String, workspace: PathBuf, policy_hash: String) -> Self {
+    pub fn new(
+        session_id: String,
+        workspace: PathBuf,
+        policy_hash: String,
+        initial_status: String,
+    ) -> Self {
         Self {
             session_id,
             workspace,
             policy_hash,
             started_at: now(),
             finished_at: None,
+            initial_status,
+            changed_files: Vec::new(),
             events: vec![],
         }
     }
@@ -58,6 +68,29 @@ pub fn latest_path() -> PathBuf {
     durable_dir().join("latest")
 }
 
+pub fn workspace_status(workspace: &Path) -> String {
+    Command::new("git")
+        .args([
+            "-C",
+            workspace.to_str().unwrap_or("."),
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+        ])
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+        .unwrap_or_default()
+}
+
+pub fn changed_files(workspace: &Path, initial_status: &str) -> Vec<String> {
+    let current = workspace_status(workspace);
+    current
+        .lines()
+        .map(str::to_owned)
+        .filter(|line| !initial_status.lines().any(|before| before == line))
+        .collect()
+}
+
 pub fn summary(id: Option<&str>, json: bool) -> anyhow::Result<()> {
     let selected = id.map(str::to_owned).or_else(|| {
         fs::read_to_string(latest_path())
@@ -77,6 +110,10 @@ pub fn summary(id: Option<&str>, json: bool) -> anyhow::Result<()> {
     println!("Session: {}", log.session_id);
     println!("Workspace: {}", log.workspace.display());
     println!("Policy hash: {}", log.policy_hash);
+    println!("Changed files: {}", log.changed_files.len());
+    for file in &log.changed_files {
+        println!("  {file}");
+    }
     println!("Events: {}", log.events.len());
     for event in log.events {
         println!("  [{}] {} {}", event.at, event.kind, event.detail);
