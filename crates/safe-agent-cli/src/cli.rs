@@ -48,6 +48,8 @@ struct RunArgs {
     keep_session: bool,
     #[arg(long)]
     dry_run: bool,
+    #[arg(long)]
+    quarantine: bool,
     #[arg(last = true, required = true)]
     agent: Vec<String>,
 }
@@ -200,6 +202,7 @@ impl From<RunArgs> for session::RunOptions {
             keep_logs: a.keep_logs,
             keep_session: a.keep_session,
             dry_run: a.dry_run,
+            quarantine: a.quarantine,
             agent: a.agent,
         }
     }

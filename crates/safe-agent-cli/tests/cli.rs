@@ -302,3 +302,30 @@ fn policy_reload_requires_approval_and_changes_the_active_decision() {
     assert!(combined.contains("access denied"));
     assert!(combined.contains("request allowed"));
 }
+
+#[test]
+fn quarantine_mode_edits_a_disposable_copy() {
+    let dir = workspace();
+    let output = Command::new(bin())
+        .args([
+            "run",
+            "--backend",
+            "none-for-debug",
+            "--quarantine",
+            "--workspace",
+            dir.path().to_str().unwrap(),
+            "--",
+            "/bin/sh",
+            "-c",
+            "printf isolated > quarantine.txt",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!dir.path().join("quarantine.txt").exists());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Mode: quarantine"));
+}
