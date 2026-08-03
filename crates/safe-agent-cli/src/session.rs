@@ -361,6 +361,9 @@ fn evaluate_request(request: &WireRequest, state: &SupervisorState) -> WireRespo
         policy::Decision::Deny => false,
         policy::Decision::Ask => approval(request, &reason),
     };
+    if allowed && request.capability == "secret" {
+        return execute_secret_request(request, state);
+    }
     let message = if allowed {
         "safe-agent: request allowed".to_string()
     } else {
@@ -370,6 +373,54 @@ fn evaluate_request(request: &WireRequest, state: &SupervisorState) -> WireRespo
         log.record_request(request, if allowed { "allow" } else { "deny" }, &message);
     }
     WireResponse { allowed, message }
+}
+fn execute_secret_request(request: &WireRequest, state: &SupervisorState) -> WireResponse {
+    let Some(command) = request.command.as_deref() else {
+        return WireResponse {
+            allowed: true,
+            message: "safe-agent: secret request approved; provide --for to execute a command"
+                .into(),
+        };
+    };
+    let value = match secrets::get(&request.resource, &state.workspace) {
+        Ok(value) => value,
+        Err(error) => {
+            return WireResponse {
+                allowed: false,
+                message: format!("safe-agent: secret retrieval failed: {error}"),
+            }
+        }
+    };
+    let output = match Command::new("/bin/sh")
+        .arg("-lc")
+        .arg(command)
+        .env(&request.resource, &value)
+        .output()
+    {
+        Ok(output) => output,
+        Err(error) => {
+            return WireResponse {
+                allowed: false,
+                message: format!("safe-agent: secret command failed to launch: {error}"),
+            }
+        }
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout).replace(&value, "[REDACTED]");
+    let stderr = String::from_utf8_lossy(&output.stderr).replace(&value, "[REDACTED]");
+    let message = format!(
+        "safe-agent: secret command {}\n{}{}",
+        if output.status.success() {
+            "completed"
+        } else {
+            "failed"
+        },
+        stdout,
+        stderr
+    );
+    WireResponse {
+        allowed: output.status.success(),
+        message,
+    }
 }
 fn reload_session_policy(request: &WireRequest, state: &SupervisorState) -> WireResponse {
     let loaded = config::load_policy(&state.workspace, None, true);
@@ -453,8 +504,6 @@ pub fn request(options: RequestOptions, session_socket: Option<&Path>) -> Result
             "safe-agent: no active session detected; run this command inside safe-agent run"
         )
     })?;
-    let capability = options.capability.clone();
-    let command = options.command.clone();
     let request = WireRequest {
         capability: options.capability,
         resource: options.resource,
@@ -469,23 +518,6 @@ pub fn request(options: RequestOptions, session_socket: Option<&Path>) -> Result
     println!("{}", response.message);
     if !response.allowed {
         bail!("request denied");
-    }
-    if capability == "secret" {
-        if let Some(command) = command {
-            let value = secrets::get(&request.resource, Path::new("."))?;
-            let output = Command::new("/bin/sh")
-                .arg("-lc")
-                .arg(&command)
-                .env(&request.resource, &value)
-                .output()?;
-            let stdout = String::from_utf8_lossy(&output.stdout).replace(&value, "[REDACTED]");
-            let stderr = String::from_utf8_lossy(&output.stderr).replace(&value, "[REDACTED]");
-            print!("{stdout}");
-            eprint!("{stderr}");
-            if !output.status.success() {
-                bail!("secret command exited with {}", output.status);
-            }
-        }
     }
     Ok(())
 }
