@@ -8,3 +8,5 @@
 - The code should be easy to understand and self-explanatory.
 - Before starting on code, you should first write tests for the expected behavior and ensure the full tests suite passes before submitting a pull request.
 - Study how established products solve the problem before designing a solution. Adopt their proven patterns and conventions rather than inventing an approach from scratch.
+- When working with a Linear ticket, first mark the ticket as "In progress" before working on the ticket. Once the ticket is complete, mark it as "Done" and close it.
+- When creating a PR, use the Linear ticket number in the title in the format `[SUFFIX-NUMBER]`
