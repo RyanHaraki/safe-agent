@@ -1,0 +1,9 @@
+{
+  "name": "@safe-agent/docs",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "check": "test -f README.md"
+  }
+}
+

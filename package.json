@@ -1,0 +1,9 @@
+{
+  "name": "safe-agent-monorepo",
+  "private": true,
+  "workspaces": ["apps/docs"],
+  "scripts": {
+    "docs:check": "test -f apps/docs/README.md"
+  }
+}
+
