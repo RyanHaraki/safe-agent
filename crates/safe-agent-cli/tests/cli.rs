@@ -142,6 +142,31 @@ fn seatbelt_denies_repo_env_read_but_allows_normal_write() {
     assert!(dir.path().join("normal.txt").exists());
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn seatbelt_allows_supervisor_ipc_and_standard_devices() {
+    let dir = workspace();
+    let output = Command::new(bin())
+        .args([
+            "run",
+            "--workspace",
+            dir.path().to_str().unwrap(),
+            "--",
+            "/bin/sh",
+            "-c",
+            "safe-agent status --json; printf ok > /dev/null",
+        ])
+        .output()
+        .unwrap();
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.status.success(), "{combined}");
+    assert!(combined.contains("\"in_session\": true"), "{combined}");
+}
+
 #[test]
 fn summary_has_durable_session_record() {
     let dir = workspace();
