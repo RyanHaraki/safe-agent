@@ -167,6 +167,32 @@ fn seatbelt_allows_supervisor_ipc_and_standard_devices() {
     assert!(combined.contains("\"in_session\": true"), "{combined}");
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn seatbelt_allows_loopback_login_callback_without_external_network() {
+    let dir = workspace();
+    let command = "python3 -c 'import socket; s=socket.socket(); s.bind((\"127.0.0.1\", 0)); s.listen(1); print(\"loopback-ok\", flush=True); s.close()'";
+    let output = Command::new(bin())
+        .args([
+            "run",
+            "--workspace",
+            dir.path().to_str().unwrap(),
+            "--",
+            "/bin/sh",
+            "-c",
+            command,
+        ])
+        .output()
+        .unwrap();
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.status.success(), "{combined}");
+    assert!(combined.contains("loopback-ok"), "{combined}");
+}
+
 #[test]
 fn summary_has_durable_session_record() {
     let dir = workspace();

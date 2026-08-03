@@ -190,6 +190,16 @@ The session home must not contain durable authority:
 
 By default, Safe Agent deletes the session directory at the end of the run, after preserving audit logs if configured. Reusable homes and shared caches are out of scope for the MVP because persistent state can become a hidden authority or compromise channel.
 
+Codex, Claude, and other agents therefore do not inherit an existing host
+login automatically. A user who starts an agent in Safe Agent may need to
+authenticate inside that session. The sandbox may allow a loopback-only login
+callback listener on `localhost`, but it must not expose the host home,
+credential files, or unrestricted external network to complete that flow.
+
+Persistent agent credentials are a future opt-in feature. It must use a
+brokered credential or session handoff mechanism rather than mounting the
+host agent home into the sandbox.
+
 ## Capability Model
 
 A capability is a scoped permission granted to the agent or one of its child commands.
@@ -233,6 +243,13 @@ Disabled by default:
 - Access to localhost/private network services unless approved.
 - Writing shell startup files, Git hooks, LaunchAgents, cron-like paths, agent configs, package manager auth files, or files on `$PATH`.
 - `sudo`, host app automation, Docker socket access, force push, package publishing, repo deletion, or cloud resource deletion.
+
+### Localhost Callbacks
+
+The Seatbelt profile allows child processes to bind and connect to
+`localhost:*` for OAuth/device-login callbacks and local development tools.
+This exception does not allow external network egress, access to private LAN
+addresses, or access to the user's host home.
 
 ## Denied Access UX
 
