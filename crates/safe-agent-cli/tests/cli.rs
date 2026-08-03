@@ -237,7 +237,8 @@ fn policy_reload_requires_approval_and_changes_the_active_decision() {
     )
     .unwrap();
     let marker = dir.path().join("first-request-complete");
-    let command = format!("safe-agent request network example.com --reason first || true; printf done > '{}'; sleep 0.3; safe-agent request network example.com --reason second", marker.display());
+    let reload_marker = dir.path().join("reload-complete");
+    let command = format!("safe-agent request network example.com --reason first || true; printf done > '{}'; while [ ! -f '{}' ]; do sleep 0.05; done; safe-agent request network example.com --reason second", marker.display(), reload_marker.display());
     let mut command_builder = Command::new(bin());
     command_builder
         .env("SAFE_AGENT_TEST_CONFIG_HOME", config.path())
@@ -294,6 +295,7 @@ fn policy_reload_requires_approval_and_changes_the_active_decision() {
         }
     }
     assert!(reloaded, "active session policy was not reloaded");
+    fs::write(&reload_marker, "done").unwrap();
     let output = child.wait_with_output().unwrap();
     let combined = format!(
         "{}{}",
