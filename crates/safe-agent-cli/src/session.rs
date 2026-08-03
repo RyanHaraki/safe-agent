@@ -26,6 +26,7 @@ pub struct RunOptions {
     pub keep_logs: bool,
     pub keep_session: bool,
     pub dry_run: bool,
+    pub quarantine: bool,
     pub agent: Vec<String>,
 }
 #[derive(Debug)]
@@ -73,12 +74,12 @@ pub fn run(options: RunOptions) -> Result<()> {
     if options.agent.is_empty() {
         bail!("an agent command is required");
     }
-    let workspace = options
+    let source_workspace = options
         .workspace
         .canonicalize()
         .with_context(|| format!("cannot resolve workspace {}", options.workspace.display()))?;
     let (mut policy, sources) = config::load_policy(
-        &workspace,
+        &source_workspace,
         options.policy.as_deref(),
         !options.no_repo_policy,
     )?;
@@ -91,10 +92,17 @@ pub fn run(options: RunOptions) -> Result<()> {
         fs::create_dir_all(root.join(directory))?;
     }
     let root = root.canonicalize()?;
+    let workspace = if options.quarantine {
+        let copy = root.join("workspace");
+        copy_workspace(&source_workspace, &copy)?;
+        copy
+    } else {
+        source_workspace.clone()
+    };
     fs::set_permissions(&root, fs::Permissions::from_mode(0o700))?;
     let session = SessionInfo {
         id: id.clone(),
-        workspace: workspace.display().to_string(),
+        workspace: source_workspace.display().to_string(),
         profile: options.profile.clone(),
         backend: options.backend.clone(),
         network: policy.network.default.clone(),
@@ -113,8 +121,13 @@ pub fn run(options: RunOptions) -> Result<()> {
         toml::to_string_pretty(&policy)?,
     )?;
     println!(
-        "Workspace: {}\nMode: live-repo\nProfile: {}\nBackend: {}\nNetwork: {}\nSession: {}",
-        workspace.display(),
+        "Workspace: {}\nMode: {}\nProfile: {}\nBackend: {}\nNetwork: {}\nSession: {}",
+        source_workspace.display(),
+        if options.quarantine {
+            "quarantine"
+        } else {
+            "live-repo"
+        },
         options.profile,
         options.backend,
         policy.network.default,
@@ -122,6 +135,9 @@ pub fn run(options: RunOptions) -> Result<()> {
     );
     println!("Allowed: read/write workspace files, isolated HOME, local tools");
     println!("Blocked: host HOME, .env files, ambient environment, protected persistence paths");
+    if options.quarantine {
+        println!("Sandbox workspace: {}", workspace.display());
+    }
     println!(
         "Policy sources: {}",
         sources
@@ -171,6 +187,24 @@ pub fn run(options: RunOptions) -> Result<()> {
     }
     if !status.success() {
         bail!("agent exited with {}", status);
+    }
+    Ok(())
+}
+
+fn copy_workspace(source: &Path, destination: &Path) -> Result<()> {
+    fs::create_dir_all(destination)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = destination.join(entry.file_name());
+        let metadata = fs::symlink_metadata(&from)?;
+        if metadata.file_type().is_symlink() {
+            std::os::unix::fs::symlink(fs::read_link(&from)?, &to)?;
+        } else if metadata.is_dir() {
+            copy_workspace(&from, &to)?;
+        } else {
+            fs::copy(&from, &to)?;
+        }
     }
     Ok(())
 }

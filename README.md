@@ -8,6 +8,8 @@ Safe Agent is a macOS-first supervisor for running CLI coding agents with a cons
 cargo build --release
 ./target/release/safe-agent init
 ./target/release/safe-agent run -- codex
+# Use a disposable copy for untrusted repositories:
+./target/release/safe-agent run --quarantine -- codex
 ```
 
 Use `--backend none-for-debug` only for development of the wrapper itself. The default backend is `macos-seatbelt`, and it fails closed if the sandbox cannot launch.
@@ -30,4 +32,3 @@ The integration suite includes a real macOS Seatbelt probe. It verifies normal l
 - `apps/docs`: documentation workspace placeholder for the future published docs site
 
 This is local security tooling, not a claim of perfect malware containment. For high-risk repositories, use a VM-backed or quarantine workflow when those backends are added.
-
