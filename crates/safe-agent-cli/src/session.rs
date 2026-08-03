@@ -276,6 +276,7 @@ fn launch_child(
             std::env::var("TERM").unwrap_or_else(|_| "xterm-256color".into()),
         )
         .env("LANG", "en_US.UTF-8");
+    copy_terminal_environment(&mut command);
     for name in [
         "SAFE_AGENT_TEST_CONFIG_HOME",
         "SAFE_AGENT_TEST_SECRET_BACKEND",
@@ -289,6 +290,25 @@ fn launch_child(
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
     command.spawn().context("launch sandboxed agent")
+}
+
+fn copy_terminal_environment(command: &mut Command) {
+    if let Ok(value) = std::env::var("COLORTERM") {
+        if matches!(value.as_str(), "truecolor" | "24bit" | "256color") {
+            command.env("COLORTERM", value);
+        }
+    }
+    for name in ["TERM_PROGRAM", "TERM_PROGRAM_VERSION"] {
+        let Ok(value) = std::env::var(name) else {
+            continue;
+        };
+        if !value.is_empty()
+            && value.len() <= 64
+            && value.bytes().all(|byte| byte.is_ascii_graphic())
+        {
+            command.env(name, value);
+        }
+    }
 }
 
 fn create_shims(root: &Path, socket: &Path) -> Result<()> {

@@ -82,6 +82,37 @@ fn debug_session_uses_fake_home_scrubs_env_and_allows_live_write() {
 }
 
 #[test]
+fn terminal_metadata_is_preserved_without_restoring_ambient_environment() {
+    let dir = workspace();
+    let output = Command::new(bin())
+        .env("COLORTERM", "truecolor")
+        .env("TERM_PROGRAM", "TestTerminal")
+        .env("TERM_PROGRAM_VERSION", "1.2.3")
+        .env("NO_COLOR", "1")
+        .env("UNSAFE_AMBIENT_VALUE", "must-not-leak")
+        .args([
+            "run",
+            "--backend",
+            "none-for-debug",
+            "--workspace",
+            dir.path().to_str().unwrap(),
+            "--",
+            "/bin/sh",
+            "-c",
+            "printf '%s|%s|%s|%s\\n' \"$COLORTERM\" \"$TERM_PROGRAM\" \"$TERM_PROGRAM_VERSION\" \"${NO_COLOR-unset}|${UNSAFE_AMBIENT_VALUE-unset}\"",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains("truecolor|TestTerminal|1.2.3|unset|unset"),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
 fn policy_explain_denies_env_and_private_network() {
     let dir = workspace();
     fs::create_dir_all(dir.path().join(".safe-agent")).unwrap();
